@@ -1,52 +1,42 @@
-// Run shellcode in the debugger
+#include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
-int main(int argc, char** argv){
-	FILE *pFile;
-	long lSize;
+
+int main(int argc, char *argv[]){
 	char *buffer;
+	FILE *sc_fd;
+	size_t file_size;
 	size_t result;
-
-
-	if (argc!=2) {
+	
+	if (argc != 2){
 		printf("Usage: %s <shellcode file>\n", argv[0]);
-		exit(1);
+		return -1;
 	}
 	
-	pFile = fopen(argv[1], "rb");
-	
-	if (pFile==NULL){
-		printf("Couldn't open file\n");
-		exit(1);
+	sc_fd = fopen(argv[1], "rb");
+	if (sc_fd == NULL){
+		printf("Error %d: Couldn't open file\n", GetLastError());
+		return -1;
 	}
 	
-	fseek(pFile, 0, SEEK_END);
-	lSize = ftell(pFile);
-	rewind(pFile);
+	fseek(sc_fd, 0, SEEK_END);
+	file_size = ftell(sc_fd);
+	rewind(sc_fd);
 	
-	// Make it 1 byte bigger for the \xCC opcode
-	buffer = (char *)malloc(lSize+1);
-	
-	if (buffer==NULL){
-		printf("Couldn't allocate memory\n");
-		exit(1);
+	buffer = VirtualAlloc(NULL, file_size+1, MEM_COMMIT|MEM_RESERVE, PAGE_EXECUTE_READWRITE );
+	if (buffer == NULL){
+		printf("Error %d: Couldn't allocate memory\n", GetLastError());
+		return -1;
 	}
 	
-	buffer[0] = '\xCC';
+	buffer[0] = 0xCC;
+	result = fread(&buffer[1], 1, file_size, sc_fd);
 	
-	result = fread(&buffer[1], 1, lSize, pFile);
+	printf("Allocated %d bytes at 0x%X\n", file_size, buffer);
 	
-	if (result!=lSize){
-		printf("Couldn't read the file");
-		exit(1);
-	}
-	
-	__asm {
-		mov eax, buffer
-		call eax
-	}
+	__asm call buffer;
 	
 	return 0;
+	
 }
